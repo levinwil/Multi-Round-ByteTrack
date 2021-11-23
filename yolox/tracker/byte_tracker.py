@@ -177,18 +177,16 @@ class BYTETracker(object):
     scale = min(img_size[0] / float(img_h), img_size[1] / float(img_w))
     bboxes /= scale
 
-    confidence_thresholds = [self.args.track_thresh, 0.1, 0.05]
-    association_thresholds = [self.args.match_thresh, 0.7, 0.3]
+    confidence_thresholds = [0.6, 0.4, 0.3, 0.1, 0.05]
+    association_thresholds = [0.7, 0.6, 0.55, 0.5, 0.3]
     remain_inds = scores > confidence_thresholds[0]
     second_inds = (scores < confidence_thresholds[0]) & (scores >= confidence_thresholds[1])
-    third_inds = (scores < confidence_thresholds[1]) & (scores >= confidence_thresholds[2])
 
-    dets_third = bboxes[third_inds]
+
     dets_second = bboxes[second_inds]
     dets = bboxes[remain_inds]
     scores_keep = scores[remain_inds]
     scores_second = scores[second_inds]
-    scores_third = scores[third_inds]
 
     if len(dets) > 0:
       '''Detections'''
@@ -246,32 +244,45 @@ class BYTETracker(object):
         track.re_activate(det, self.frame_id, new_id=False)
         refind_stracks.append(track)
 
+
+    rnd_to_global_u_track_reference = {0 : np.array(u_track_first), 1 : np.array([u_track_first[i] for i in u_track_second])}
+    u_track_of_previous_round = u_track_second
+
     ''' Step 3: Third association, with low score detection boxes'''
     # association the untrack to the low score detections
-    if len(dets_third) > 0:
-      '''Detections'''
-      detections_third = [
-          STrack(STrack.tlbr_to_tlwh(tlbr), s) for (tlbr, s) in zip(dets_third, scores_third)
-      ]
-    else:
-      detections_third = []
-    r_tracked_stracks = [
-        strack_pool[u_track_first[i]] for i in u_track_second if strack_pool[i].state == TrackState.Tracked
-    ]
-    dists = matching.iou_distance(r_tracked_stracks, detections_third)
-    matches, u_track_third, u_detection_third = matching.linear_assignment(
-        dists, thresh=association_thresholds[2])
-    for itracked, idet in matches:
-      track = r_tracked_stracks[itracked]
-      det = detections_third[idet]
-      if track.state == TrackState.Tracked:
-        track.update(det, self.frame_id)
-        activated_starcks.append(track)
+    for rnd in range(2, len(confidence_thresholds)):
+      inds_of_round = (scores < confidence_thresholds[rnd - 1]) & (scores >= confidence_thresholds[rnd])
+      dets_of_round = bboxes[inds_of_round]
+      scores_of_round = scores[inds_of_round]
+      if len(dets_of_round) > 0:
+        '''Detections'''
+        detections_of_round = [
+            STrack(STrack.tlbr_to_tlwh(tlbr), s)
+            for (tlbr, s) in zip(dets_of_round, scores_of_round)
+        ]
       else:
-        track.re_activate(det, self.frame_id, new_id=False)
-        refind_stracks.append(track)
+        detections_of_round = []
+      r_tracked_stracks = [
+          strack_pool[rnd_to_global_u_track_reference[rnd - 2][i]]
+          for i in u_track_of_previous_round
+          if strack_pool[rnd_to_global_u_track_reference[rnd - 2][i]].state == TrackState.Tracked
+      ]
+      dists = matching.iou_distance(r_tracked_stracks, detections_of_round)
+      matches, u_track_of_round, u_detection_of_round = matching.linear_assignment(
+          dists, thresh=association_thresholds[rnd])
+      rnd_to_global_u_track_reference[rnd] = np.array([rnd_to_global_u_track_reference[rnd - 1][i] for i in u_track_of_round])
+      u_track_of_previous_round = u_track_of_round
+      for itracked, idet in matches:
+        track = r_tracked_stracks[itracked]
+        det = detections_of_round[idet]
+        if track.state == TrackState.Tracked:
+          track.update(det, self.frame_id)
+          activated_starcks.append(track)
+        else:
+          track.re_activate(det, self.frame_id, new_id=False)
+          refind_stracks.append(track)
 
-    for it in u_track_third:
+    for it in u_track_of_round:
       track = r_tracked_stracks[it]
       if not track.state == TrackState.Lost:
         track.mark_lost()
