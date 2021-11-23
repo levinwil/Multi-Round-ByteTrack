@@ -177,8 +177,8 @@ class BYTETracker(object):
     scale = min(img_size[0] / float(img_h), img_size[1] / float(img_w))
     bboxes /= scale
 
-    confidence_thresholds = [0.6, 0.4, 0.1]
-    association_thresholds = [0.9, 0.7, 0.5]
+    confidence_thresholds = [self.args.track_thresh, 0.1, 0.05]
+    association_thresholds = [self.args.match_thresh, 0.7, 0.3]
     remain_inds = scores > confidence_thresholds[0]
     second_inds = (scores < confidence_thresholds[0]) & (scores >= confidence_thresholds[1])
     third_inds = (scores < confidence_thresholds[1]) & (scores >= confidence_thresholds[2])
@@ -210,7 +210,7 @@ class BYTETracker(object):
     dists = matching.iou_distance(strack_pool, detections)
     if not self.args.mot20:
       dists = matching.fuse_score(dists, detections)
-    matches, u_track, u_detection = matching.linear_assignment(dists,
+    matches, u_track_first, u_detection_first = matching.linear_assignment(dists,
                                                                thresh=association_thresholds[0])
 
     for itracked, idet in matches:
@@ -232,10 +232,10 @@ class BYTETracker(object):
     else:
       detections_second = []
     r_tracked_stracks = [
-        strack_pool[i] for i in u_track if strack_pool[i].state == TrackState.Tracked
+        strack_pool[i] for i in u_track_first if strack_pool[i].state == TrackState.Tracked
     ]
     dists = matching.iou_distance(r_tracked_stracks, detections_second)
-    matches, u_track, u_detection_second = matching.linear_assignment(dists, thresh=association_thresholds[1])
+    matches, u_track_second, u_detection_second = matching.linear_assignment(dists, thresh=association_thresholds[1])
     for itracked, idet in matches:
       track = r_tracked_stracks[itracked]
       det = detections_second[idet]
@@ -256,10 +256,10 @@ class BYTETracker(object):
     else:
       detections_third = []
     r_tracked_stracks = [
-        strack_pool[i] for i in u_track if strack_pool[i].state == TrackState.Tracked
+        strack_pool[u_track_first[i]] for i in u_track_second if strack_pool[i].state == TrackState.Tracked
     ]
     dists = matching.iou_distance(r_tracked_stracks, detections_third)
-    matches, u_track, u_detection_third = matching.linear_assignment(
+    matches, u_track_third, u_detection_third = matching.linear_assignment(
         dists, thresh=association_thresholds[2])
     for itracked, idet in matches:
       track = r_tracked_stracks[itracked]
@@ -271,13 +271,13 @@ class BYTETracker(object):
         track.re_activate(det, self.frame_id, new_id=False)
         refind_stracks.append(track)
 
-    for it in u_track:
+    for it in u_track_third:
       track = r_tracked_stracks[it]
       if not track.state == TrackState.Lost:
         track.mark_lost()
         lost_stracks.append(track)
     '''Deal with unconfirmed tracks, usually tracks with only one beginning frame'''
-    detections = [detections[i] for i in u_detection]
+    detections = [detections[i] for i in u_detection_first]
     dists = matching.iou_distance(unconfirmed, detections)
     if not self.args.mot20:
       dists = matching.fuse_score(dists, detections)
