@@ -178,7 +178,7 @@ class BYTETracker(object):
     bboxes /= scale
 
     confidence_thresholds = [0.6, 0.4, 0.3, 0.1, 0.05]
-    association_thresholds = [0.7, 0.6, 0.55, 0.5, 0.3]
+    association_thresholds = [0.9, 0.6, 0.55, 0.5, 0.3]
     remain_inds = scores > confidence_thresholds[0]
     second_inds = (scores < confidence_thresholds[0]) & (scores >= confidence_thresholds[1])
 
