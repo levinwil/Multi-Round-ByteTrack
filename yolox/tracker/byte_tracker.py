@@ -177,8 +177,8 @@ class BYTETracker(object):
     scale = min(img_size[0] / float(img_h), img_size[1] / float(img_w))
     bboxes /= scale
 
-    confidence_thresholds = [0.6, 0.4, 0.3, 0.1, 0.05]
-    association_thresholds = [0.9, 0.6, 0.55, 0.5, 0.3]
+    confidence_thresholds = [0.6, 0.35, 0.1]
+    association_thresholds = [0.9, 0.7, 0.5]
     remain_inds = scores > confidence_thresholds[0]
     second_inds = (scores < confidence_thresholds[0]) & (scores >= confidence_thresholds[1])
 
